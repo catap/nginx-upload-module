@@ -198,7 +198,6 @@ typedef struct ngx_unzip_ctx_s {
 static void *ngx_http_unzip_filter_alloc(void *opaque, u_int items,
     u_int size);
 static void ngx_http_unzip_filter_free(void *opaque, void *address);
-static void ngx_http_unzip_error(ngx_unzip_ctx_t *ctx);
 void ngx_http_unzip_split_chain(ngx_chain_t *cl, off_t *limit, ngx_buf_t *buf, ngx_chain_t *newcl);
 ngx_int_t
 ngx_http_unzip_chain_copy_range(ngx_chain_t *chain, ngx_chain_t **copy, off_t *limit,
@@ -1166,7 +1165,7 @@ ngx_http_unzip_inflate_abort(ngx_unzip_ctx_t *ctx) {
 static ngx_int_t /* {{{ ngx_http_unzip_inflate_process_chain */
 ngx_http_unzip_inflate_process_chain(ngx_unzip_ctx_t *ctx, ngx_chain_t *chain) {
     int rc;
-    size_t remaining;
+    ngx_int_t remaining;
     int flush;
 
     while(chain != NULL && !chain->buf->last_in_chain) {

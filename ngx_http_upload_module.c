@@ -154,6 +154,13 @@ static ngx_upload_field_filter_t ngx_write_field_filter = { /* {{{ */
     ngx_http_upload_field_process_chain
 }; /* }}} */
 
+
+
+static ngx_path_init_t  ngx_http_upload_temp_path = {
+    ngx_string(NGX_HTTP_PROXY_TEMP_PATH), { 1, 2, 0 }
+};
+
+
 static ngx_command_t  ngx_http_upload_commands[] = { /* {{{ */
 
     /*
@@ -1098,10 +1105,12 @@ ngx_http_upload_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
     ngx_conf_merge_str_value(conf->url, prev->url, "");
 
-    ngx_conf_merge_path_value(conf->store_path,
-                              prev->store_path,
-                              NGX_HTTP_PROXY_TEMP_PATH, 1, 2, 0,
-                              ngx_garbage_collector_temp_handler, cf);
+    if (ngx_conf_merge_path_value(cf, &conf->store_path,
+                                  prev->store_path,
+				  &ngx_http_upload_temp_path)
+        != NGX_OK) {
+        return NGX_CONF_ERROR;
+    }
 
     ngx_conf_merge_uint_value(conf->store_access,
                               prev->store_access, 0600);
@@ -1466,8 +1475,8 @@ ngx_http_upload_pass_form_field(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     ngx_str_t                  *value;
 #if (NGX_PCRE)
-    ngx_int_t                   n;
-    ngx_str_t                  err;
+    ngx_regex_compile_t         rc;
+    u_char                      errstr[NGX_MAX_CONF_ERRSTR];
 #endif
     ngx_http_upload_field_filter_t *f;
 
@@ -1487,23 +1496,20 @@ ngx_http_upload_pass_form_field(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
 #if (NGX_PCRE)
-    f->regex = ngx_regex_compile(&value[1], 0, cf->pool, &err);
+    ngx_memzero(&rc, sizeof(ngx_regex_compile_t));
 
-    if (f->regex == NULL) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "%s", err.data);
-        return NGX_CONF_ERROR;
-    }
-    
-    n = ngx_regex_capture_count(f->regex);
+    rc.pattern = value[1];
+    rc.pool = cf->pool;
+    rc.err.len = NGX_MAX_CONF_ERRSTR;
+    rc.err.data = errstr;    
 
-    if (n < 0) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                           ngx_regex_capture_count_n " failed for "
-                           "pattern \"%V\"", &value[1]);
+    if (ngx_regex_compile(&rc) != NGX_OK) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "%V", &rc.err);
         return NGX_CONF_ERROR;
     }
 
-    f->ncaptures = n;
+    f->regex = rc.regex;
+    f->ncaptures = rc.captures;
 #else
     f->text.len = value[1].len;
     f->text.data = value[1].data;
